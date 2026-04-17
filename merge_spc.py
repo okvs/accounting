@@ -11,7 +11,7 @@
     python merge_spc.py [입력폴더] [출력파일]
 
     인자 생략 시 스크립트와 같은 위치의 SPC 폴더를 대상으로 하며
-    SPC/merged_accounts.xlsx를 생성한다.
+    SPC/merge_spc.xlsx를 생성한다.
 """
 
 from __future__ import annotations
@@ -343,7 +343,7 @@ DEFAULT_INPUT_DIR = Path(__file__).resolve().parent / "SPC"
 def main() -> None:
     input_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_INPUT_DIR
     output_path = (
-        Path(sys.argv[2]) if len(sys.argv) > 2 else input_dir / "merged_accounts.xlsx"
+        Path(sys.argv[2]) if len(sys.argv) > 2 else input_dir / "merge_spc.xlsx"
     )
 
     if not input_dir.is_dir():
