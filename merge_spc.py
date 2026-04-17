@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import sys
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -275,41 +276,72 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     false_rows: list[dict] = []
     error_rows: list[dict] = []
 
+    def _record_warnings(caught, company, filename, sheet, phase):
+        for w in caught:
+            msg = f"{type(w.message).__name__}: {w.message}"
+            if phase:
+                msg = f"[{phase}] {msg}"
+            print(f"[경고] {filename} / {sheet or '-'}: {msg}")
+            error_rows.append({
+                "회사명": company, "파일명": filename,
+                "시트": sheet, "사유": msg,
+            })
+
     total = len(xlsx_files)
     for idx, path in enumerate(xlsx_files, start=1):
         prog = f"{idx}/{total}"
         company = extract_company_name(path.name)
-        try:
-            wb = load_workbook(filename=path, data_only=True, read_only=True)
-        except Exception as e:
-            print(f"[실패] {path.name} 열기 오류: {e}")
+
+        # 파일 열기 (경고 포함)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                wb = load_workbook(filename=path, data_only=True, read_only=True)
+                open_error = None
+            except Exception as e:
+                wb = None
+                open_error = e
+        _record_warnings(caught, company, path.name, "", "파일 열기")
+        if open_error is not None:
+            print(f"[실패] {path.name} 열기 오류: {open_error}")
             error_rows.append({
                 "회사명": company, "파일명": path.name,
-                "시트": "", "사유": f"파일 열기 실패: {e}",
+                "시트": "", "사유": f"파일 열기 실패: {open_error}",
             })
             continue
+
         try:
             for sheet in SHEET_NAMES:
                 if sheet not in wb.sheetnames:
                     print(f"[건너뜀] {path.name} / {sheet}: 시트 없음")
                     continue
-                try:
-                    df = extract_sheet(wb, sheet, path)
-                    print(f"[OK {prog}] {path.name} / {sheet}: {len(df)}행 추출")
-                    sheet_frames[sheet].append(df)
-                except Exception as e:
-                    print(f"[실패] {path.name} / {sheet}: {e}")
-                    error_rows.append({
-                        "회사명": company, "파일명": path.name,
-                        "시트": sheet, "사유": str(e),
-                    })
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    try:
+                        df = extract_sheet(wb, sheet, path)
+                        print(f"[OK {prog}] {path.name} / {sheet}: {len(df)}행 추출")
+                        sheet_frames[sheet].append(df)
+                    except Exception as e:
+                        print(f"[실패] {path.name} / {sheet}: {e}")
+                        error_rows.append({
+                            "회사명": company, "파일명": path.name,
+                            "시트": sheet, "사유": str(e),
+                        })
+                _record_warnings(caught, company, path.name, sheet, "시트 처리")
 
-            hits = collect_false_cells(wb, path)
+            # FALSE 점검 (경고 포함)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                hits = collect_false_cells(wb, path)
+            _record_warnings(caught, company, path.name, "(전체)", "FALSE 점검")
             if hits:
                 print(f"[FALSE {prog}] {path.name}: {len(hits)}건")
                 false_rows.extend(hits)
         finally:
-            wb.close()
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                wb.close()
+            _record_warnings(caught, company, path.name, "", "파일 닫기")
 
     non_empty = {s: fs for s, fs in sheet_frames.items() if fs}
     if not non_empty and not false_rows and not error_rows:
