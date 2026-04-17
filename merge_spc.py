@@ -8,9 +8,10 @@
 데이터: 헤더 바로 아래부터 빈 행이 나오기 전까지.
 
 사용법:
-    python merge_accounts.py [입력폴더] [출력파일]
+    python merge_spc.py [입력폴더] [출력파일]
 
-    인자 생략 시 현재 폴더의 .xlsx 파일들을 읽어 merged_accounts.xlsx 생성.
+    인자 생략 시 스크립트와 같은 위치의 SPC 폴더를 대상으로 하며
+    SPC/merged_accounts.xlsx를 생성한다.
 """
 
 from __future__ import annotations
@@ -336,8 +337,11 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     print(f"\n[완료] {output_path}")
 
 
+DEFAULT_INPUT_DIR = Path(__file__).resolve().parent / "SPC"
+
+
 def main() -> None:
-    input_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
+    input_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_INPUT_DIR
     output_path = (
         Path(sys.argv[2]) if len(sys.argv) > 2 else input_dir / "merged_accounts.xlsx"
     )
