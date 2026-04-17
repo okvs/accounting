@@ -1,7 +1,8 @@
 """
-폴더 내 동일 포맷 엑셀 파일들에서 '현금및현금성자산' 시트의 계정과목을 추출해
-하나의 엑셀 파일로 합치는 스크립트.
+폴더 내 동일 포맷 엑셀 파일들에서 지정 시트의 계정과목을 추출해
+하나의 엑셀 파일로 시트별로 합치는 스크립트.
 
+대상 시트: 현금및현금성자산, 유동화자산, 장단기및유동화부채
 헤더 행: B13~B17 중 '계정과목명' 문자열이 있는 셀이 속한 행.
 데이터: 헤더 바로 아래부터 빈 행이 나오기 전까지.
 
@@ -22,7 +23,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-SHEET_NAME = "현금및현금성자산"
+SHEET_NAMES = ("현금및현금성자산", "유동화자산", "장단기및유동화부채")
 HEADER_KEYWORD = "계정과목명"
 HEADER_SEARCH_ROWS = range(13, 18)  # B13 ~ B17
 HEADER_COL = "B"
@@ -87,7 +88,7 @@ HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
 THIN_SIDE = Side(style="thin", color="000000")
 CELL_BORDER = Border(top=THIN_SIDE, bottom=THIN_SIDE, left=THIN_SIDE, right=THIN_SIDE)
 AMOUNT_NUMBER_FORMAT = "#,##0;[Red](#,##0)"  # 숫자-빨간색괄호 (천단위 구분)
-AMOUNT_COLUMN_SUFFIX = "금액"
+AMOUNT_COLUMN_KEYWORD = "금액"
 MAX_COL_WIDTH = 60
 
 
@@ -103,7 +104,7 @@ def format_worksheet(ws) -> None:
     # 금액으로 끝나는 컬럼 인덱스 수집
     amount_cols = [
         c for c in range(1, ws.max_column + 1)
-        if str(ws.cell(row=1, column=c).value or "").strip().endswith(AMOUNT_COLUMN_SUFFIX)
+        if AMOUNT_COLUMN_KEYWORD in str(ws.cell(row=1, column=c).value or "")
     ]
 
     # 헤더 스타일
@@ -140,53 +141,47 @@ def find_header_row(ws) -> int | None:
     return None
 
 
-def extract_accounts(xlsx_path: Path) -> pd.DataFrame:
-    """엑셀 파일 하나에서 계정과목 표를 DataFrame으로 반환."""
-    wb = load_workbook(filename=xlsx_path, data_only=True, read_only=True)
-    try:
-        if SHEET_NAME not in wb.sheetnames:
-            raise ValueError(f"시트 '{SHEET_NAME}'를 찾을 수 없습니다.")
-        ws = wb[SHEET_NAME]
+def extract_sheet(wb, sheet_name: str, xlsx_path: Path) -> pd.DataFrame:
+    """특정 시트에서 계정과목 표를 DataFrame으로 반환."""
+    ws = wb[sheet_name]
 
-        header_row = find_header_row(ws)
-        if header_row is None:
-            raise ValueError(
-                f"B13~B17에서 '{HEADER_KEYWORD}' 헤더를 찾지 못했습니다."
-            )
+    header_row = find_header_row(ws)
+    if header_row is None:
+        raise ValueError(
+            f"B13~B17에서 '{HEADER_KEYWORD}' 헤더를 찾지 못했습니다."
+        )
 
-        # 헤더 행 전체 값 수집 (B열부터 오른쪽 끝까지)
-        headers: list[str] = []
-        last_col = 0
-        for col_idx, cell in enumerate(ws[header_row], start=1):
-            val = cell.value
-            if col_idx < 2:  # A열은 무시
+    # 헤더 행 전체 값 수집 (B열부터 오른쪽 끝까지)
+    headers: list[str] = []
+    last_col = 0
+    for col_idx, cell in enumerate(ws[header_row], start=1):
+        val = cell.value
+        if col_idx < 2:  # A열은 무시
+            continue
+        if val is None or str(val).strip() == "":
+            if not headers:
                 continue
-            if val is None or str(val).strip() == "":
-                if not headers:
-                    continue
-                break
-            headers.append(str(val).strip())
-            last_col = col_idx
+            break
+        headers.append(str(val).strip())
+        last_col = col_idx
 
-        if not headers:
-            raise ValueError("헤더 값이 비어있습니다.")
+    if not headers:
+        raise ValueError("헤더 값이 비어있습니다.")
 
-        # 데이터 수집 (헤더 바로 아래부터 빈 행까지)
-        rows: list[list] = []
-        for row_cells in ws.iter_rows(
-            min_row=header_row + 1, min_col=2, max_col=last_col
-        ):
-            values = [c.value for c in row_cells]
-            if all(v is None or str(v).strip() == "" for v in values):
-                break
-            rows.append(values)
+    # 데이터 수집 (헤더 바로 아래부터 빈 행까지)
+    rows: list[list] = []
+    for row_cells in ws.iter_rows(
+        min_row=header_row + 1, min_col=2, max_col=last_col
+    ):
+        values = [c.value for c in row_cells]
+        if all(v is None or str(v).strip() == "" for v in values):
+            break
+        rows.append(values)
 
-        df = pd.DataFrame(rows, columns=headers)
-        df.insert(0, "회사명", extract_company_name(xlsx_path.name))
-        df.insert(1, "파일명", xlsx_path.name)
-        return df
-    finally:
-        wb.close()
+    df = pd.DataFrame(rows, columns=headers)
+    df.insert(0, "회사명", extract_company_name(xlsx_path.name))
+    df.insert(1, "파일명", xlsx_path.name)
+    return df
 
 
 def merge_folder(input_dir: Path, output_path: Path) -> None:
@@ -198,25 +193,41 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
         print(f"[경고] '{input_dir}' 폴더에 .xlsx 파일이 없습니다.")
         return
 
-    frames: list[pd.DataFrame] = []
+    # sheet_name -> list[DataFrame]
+    sheet_frames: dict[str, list[pd.DataFrame]] = {s: [] for s in SHEET_NAMES}
+
     for path in xlsx_files:
         try:
-            df = extract_accounts(path)
-            print(f"[OK] {path.name}: {len(df)}행 추출")
-            frames.append(df)
+            wb = load_workbook(filename=path, data_only=True, read_only=True)
         except Exception as e:
-            print(f"[실패] {path.name}: {e}")
+            print(f"[실패] {path.name} 열기 오류: {e}")
+            continue
+        try:
+            for sheet in SHEET_NAMES:
+                if sheet not in wb.sheetnames:
+                    print(f"[건너뜀] {path.name} / {sheet}: 시트 없음")
+                    continue
+                try:
+                    df = extract_sheet(wb, sheet, path)
+                    print(f"[OK] {path.name} / {sheet}: {len(df)}행 추출")
+                    sheet_frames[sheet].append(df)
+                except Exception as e:
+                    print(f"[실패] {path.name} / {sheet}: {e}")
+        finally:
+            wb.close()
 
-    if not frames:
+    non_empty = {s: fs for s, fs in sheet_frames.items() if fs}
+    if not non_empty:
         print("추출된 데이터가 없어 출력 파일을 생성하지 않습니다.")
         return
 
-    merged = pd.concat(frames, ignore_index=True)
-    sheet = "계정과목_통합"
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        merged.to_excel(writer, sheet_name=sheet, index=False)
-        format_worksheet(writer.sheets[sheet])
-    print(f"\n[완료] {output_path} ({len(merged)}행)")
+        for sheet, frames in non_empty.items():
+            merged = pd.concat(frames, ignore_index=True)
+            merged.to_excel(writer, sheet_name=sheet, index=False)
+            format_worksheet(writer.sheets[sheet])
+            print(f"  → {sheet}: {len(merged)}행")
+    print(f"\n[완료] {output_path}")
 
 
 def main() -> None:
