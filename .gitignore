@@ -6,11 +6,7 @@ __pycache__/
 venv/
 env/
 
-# Excel temp
-~$*.xlsx
-~$*.xls
-
-# 데이터 엑셀 (입력/출력)
+# Excel (데이터/임시파일 전부)
 *.xlsx
 *.xls
 
