@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 SHEET_NAME = "현금및현금성자산"
@@ -84,6 +84,10 @@ def extract_company_name(filename: str) -> str:
 HEADER_FILL = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
 HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
+THIN_SIDE = Side(style="thin", color="000000")
+CELL_BORDER = Border(top=THIN_SIDE, bottom=THIN_SIDE, left=THIN_SIDE, right=THIN_SIDE)
+AMOUNT_NUMBER_FORMAT = "#,##0;[Red](#,##0)"  # 숫자-빨간색괄호 (천단위 구분)
+AMOUNT_COLUMN_SUFFIX = "금액"
 MAX_COL_WIDTH = 60
 
 
@@ -95,12 +99,28 @@ def _cell_display_width(value) -> int:
 
 
 def format_worksheet(ws) -> None:
-    """헤더 스타일 지정 + 열 너비 자동 조정."""
+    """헤더 스타일 + 전체 테두리 + 금액 컬럼 숫자서식 + 열 너비 자동 조정."""
+    # 금액으로 끝나는 컬럼 인덱스 수집
+    amount_cols = [
+        c for c in range(1, ws.max_column + 1)
+        if str(ws.cell(row=1, column=c).value or "").strip().endswith(AMOUNT_COLUMN_SUFFIX)
+    ]
+
+    # 헤더 스타일
     for cell in ws[1]:
         cell.fill = HEADER_FILL
         cell.font = HEADER_FONT
         cell.alignment = HEADER_ALIGN
 
+    # 전체 셀 테두리 + 금액 컬럼 숫자서식
+    for row_idx in range(1, ws.max_row + 1):
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = CELL_BORDER
+            if row_idx > 1 and col_idx in amount_cols:
+                cell.number_format = AMOUNT_NUMBER_FORMAT
+
+    # 열 너비 자동 조정
     for col_idx in range(1, ws.max_column + 1):
         letter = get_column_letter(col_idx)
         max_width = 0
