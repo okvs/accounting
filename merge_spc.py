@@ -10,8 +10,8 @@
 사용법:
     python merge_spc.py [입력폴더] [출력파일]
 
-    인자 생략 시 스크립트와 같은 위치의 SPC 폴더를 대상으로 하며
-    SPC/merge_spc.xlsx를 생성한다.
+    인자 생략 시 스크립트와 같은 위치의 SPC 폴더를 읽고,
+    스크립트와 같은 위치에 merge_spc.xlsx를 생성한다.
 """
 
 from __future__ import annotations
@@ -371,13 +371,15 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     print(f"\n[완료] {output_path}")
 
 
-DEFAULT_INPUT_DIR = Path(__file__).resolve().parent / "SPC"
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_INPUT_DIR = SCRIPT_DIR / "SPC"
+DEFAULT_OUTPUT_PATH = SCRIPT_DIR / "merge_spc.xlsx"
 
 
 def main() -> None:
     input_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_INPUT_DIR
     output_path = (
-        Path(sys.argv[2]) if len(sys.argv) > 2 else input_dir / "merge_spc.xlsx"
+        Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_OUTPUT_PATH
     )
 
     if not input_dir.is_dir():
