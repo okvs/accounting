@@ -38,7 +38,7 @@ def extract_company_name(filename: str) -> str:
       1) 확장자 제거 후 앞쪽 [0-9.#-_] 연속 문자 제거
       2) '_' 또는 공백으로 split
       3) 숫자로만 된 토큰, '템플릿'/'Template' 토큰 제거
-      4) 남은 토큰을 공백으로 이어 반환
+      4) 남은 토큰을 '_'로 이어 반환
     """
     stem = Path(filename).stem
     stripped = LEADING_STRIP_PATTERN.sub("", stem)
@@ -47,7 +47,7 @@ def extract_company_name(filename: str) -> str:
         t for t in tokens
         if not t.isdigit() and t.lower() not in DROP_TOKENS
     ]
-    return " ".join(kept) if kept else stem
+    return "_".join(kept) if kept else stem
 
 
 def find_header_row(ws) -> int | None:
