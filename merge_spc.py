@@ -275,7 +275,9 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     false_rows: list[dict] = []
     error_rows: list[dict] = []
 
-    for path in xlsx_files:
+    total = len(xlsx_files)
+    for idx, path in enumerate(xlsx_files, start=1):
+        prog = f"{idx}/{total}"
         company = extract_company_name(path.name)
         try:
             wb = load_workbook(filename=path, data_only=True, read_only=True)
@@ -293,7 +295,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                     continue
                 try:
                     df = extract_sheet(wb, sheet, path)
-                    print(f"[OK] {path.name} / {sheet}: {len(df)}행 추출")
+                    print(f"[OK {prog}] {path.name} / {sheet}: {len(df)}행 추출")
                     sheet_frames[sheet].append(df)
                 except Exception as e:
                     print(f"[실패] {path.name} / {sheet}: {e}")
@@ -304,7 +306,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
 
             hits = collect_false_cells(wb, path)
             if hits:
-                print(f"[FALSE] {path.name}: {len(hits)}건")
+                print(f"[FALSE {prog}] {path.name}: {len(hits)}건")
                 false_rows.extend(hits)
         finally:
             wb.close()
