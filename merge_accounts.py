@@ -104,7 +104,7 @@ CELL_BORDER = Border(top=THIN_SIDE, bottom=THIN_SIDE, left=THIN_SIDE, right=THIN
 # 헤더 키워드가 컬럼명에 포함되면 지정 셀서식 적용 (위에서부터 첫 매칭)
 COLUMN_FORMAT_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("금액", "잔액", "수익"), "#,##0;[Red](#,##0)"),  # 숫자-빨간색괄호
-    (("실행일", "만기일", "발행일"), "yyyy-mm-dd"),      # 간단한 날짜 (-일자 포함)
+    (("실행일", "만기", "발행일"), "yyyy-mm-dd"),        # 간단한 날짜 (만기·만기일·만기일자 등)
     (("이자율",), "0.00%"),                             # 백분율 (소숫점 둘째자리)
 )
 # 빈 값을 0으로 채울 컬럼 키워드
