@@ -3,7 +3,7 @@
 하나의 엑셀 파일로 시트별로 합치는 스크립트.
 
 대상 시트: 현금및현금성자산, 유동화자산, 장단기및유동화부채
-헤더 행: B13~B17 중 '계정과목명' 문자열이 있는 셀이 속한 행.
+헤더 행: B10~B40 중 '계정과목명' 문자열이 있는 셀이 속한 행.
 데이터: 헤더 바로 아래부터 빈 행이 나오기 전까지.
 
 사용법:
@@ -25,7 +25,7 @@ from openpyxl.utils import get_column_letter
 
 SHEET_NAMES = ("현금및현금성자산", "유동화자산", "장단기및유동화부채")
 HEADER_KEYWORD = "계정과목명"
-HEADER_SEARCH_ROWS = range(13, 18)  # B13 ~ B17
+HEADER_SEARCH_ROWS = range(10, 41)  # B10 ~ B40
 HEADER_COL = "B"
 
 # FALSE 값 점검 범위 (전체 시트의 E1:F40)
@@ -139,7 +139,7 @@ def format_worksheet(ws) -> None:
 
 
 def find_header_row(ws) -> int | None:
-    """B13~B17 중 '계정과목명'이 있는 행 번호 반환. 못 찾으면 None."""
+    """B10~B40 중 '계정과목명'이 있는 행 번호 반환. 못 찾으면 None."""
     for row in HEADER_SEARCH_ROWS:
         value = ws[f"{HEADER_COL}{row}"].value
         if value is not None and HEADER_KEYWORD in str(value):
@@ -183,7 +183,7 @@ def extract_sheet(wb, sheet_name: str, xlsx_path: Path) -> pd.DataFrame:
     header_row = find_header_row(ws)
     if header_row is None:
         raise ValueError(
-            f"B13~B17에서 '{HEADER_KEYWORD}' 헤더를 찾지 못했습니다."
+            f"B10~B40에서 '{HEADER_KEYWORD}' 헤더를 찾지 못했습니다."
         )
 
     # 헤더 행 전체 값 수집 (B열부터 오른쪽 끝까지)
