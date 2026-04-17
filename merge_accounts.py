@@ -109,6 +109,12 @@ COLUMN_FORMAT_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 # 빈 값을 0으로 채울 컬럼 키워드
 ZERO_FILL_KEYWORDS = ("금액", "잔액", "수익")
+
+# 특정 셀서식이 적용된 컬럼의 최소 너비 보장 (발행일자/만기일자 등 좁음 방지)
+FORMAT_MIN_WIDTHS = {
+    "yyyy-mm-dd": 14,
+    "0.00%": 10,
+}
 MAX_COL_WIDTH = 60
 
 
@@ -159,7 +165,11 @@ def format_worksheet(ws) -> None:
             w = _cell_display_width(ws.cell(row=row_idx, column=col_idx).value)
             if w > max_width:
                 max_width = w
-        ws.column_dimensions[letter].width = min(max_width + 2, MAX_COL_WIDTH)
+        width = min(max_width + 2, MAX_COL_WIDTH)
+        fmt = col_formats.get(col_idx)
+        if fmt in FORMAT_MIN_WIDTHS:
+            width = max(width, FORMAT_MIN_WIDTHS[fmt])
+        ws.column_dimensions[letter].width = width
 
 
 def find_header_row(ws, keyword: str) -> int | None:
