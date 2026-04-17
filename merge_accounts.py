@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -23,6 +24,30 @@ SHEET_NAME = "현금및현금성자산"
 HEADER_KEYWORD = "계정과목명"
 HEADER_SEARCH_ROWS = range(13, 18)  # B13 ~ B17
 HEADER_COL = "B"
+
+# 회사명 추출 설정
+LEADING_STRIP_PATTERN = re.compile(r"^[0-9.#\-_]+")
+TOKEN_SPLIT_PATTERN = re.compile(r"[_\s]+")
+DROP_TOKENS = {"템플릿", "template"}
+
+
+def extract_company_name(filename: str) -> str:
+    """파일명에서 회사명 추출.
+
+    규칙:
+      1) 확장자 제거 후 앞쪽 [0-9.#-_] 연속 문자 제거
+      2) '_' 또는 공백으로 split
+      3) 숫자로만 된 토큰, '템플릿'/'Template' 토큰 제거
+      4) 남은 토큰을 공백으로 이어 반환
+    """
+    stem = Path(filename).stem
+    stripped = LEADING_STRIP_PATTERN.sub("", stem)
+    tokens = [t for t in TOKEN_SPLIT_PATTERN.split(stripped) if t]
+    kept = [
+        t for t in tokens
+        if not t.isdigit() and t.lower() not in DROP_TOKENS
+    ]
+    return " ".join(kept) if kept else stem
 
 
 def find_header_row(ws) -> int | None:
@@ -76,7 +101,8 @@ def extract_accounts(xlsx_path: Path) -> pd.DataFrame:
             rows.append(values)
 
         df = pd.DataFrame(rows, columns=headers)
-        df.insert(0, "파일명", xlsx_path.name)
+        df.insert(0, "회사명", extract_company_name(xlsx_path.name))
+        df.insert(1, "파일명", xlsx_path.name)
         return df
     finally:
         wb.close()
