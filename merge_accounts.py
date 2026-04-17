@@ -101,8 +101,14 @@ HEADER_FONT = Font(bold=True, color="FFFFFF")
 HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
 THIN_SIDE = Side(style="thin", color="000000")
 CELL_BORDER = Border(top=THIN_SIDE, bottom=THIN_SIDE, left=THIN_SIDE, right=THIN_SIDE)
-AMOUNT_NUMBER_FORMAT = "#,##0;[Red](#,##0)"  # 숫자-빨간색괄호 (천단위 구분)
-AMOUNT_COLUMN_KEYWORDS = ("금액", "잔액")
+# 헤더 키워드가 컬럼명에 포함되면 지정 셀서식 적용 (위에서부터 첫 매칭)
+COLUMN_FORMAT_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("금액", "잔액", "수익"), "#,##0;[Red](#,##0)"),  # 숫자-빨간색괄호
+    (("실행일", "만기일", "발행일"), "yyyy-mm-dd"),      # 간단한 날짜 (-일자 포함)
+    (("이자율",), "0.00%"),                             # 백분율 (소숫점 둘째자리)
+)
+# 빈 값을 0으로 채울 컬럼 키워드
+ZERO_FILL_KEYWORDS = ("금액", "잔액", "수익")
 MAX_COL_WIDTH = 60
 
 
@@ -113,16 +119,23 @@ def _cell_display_width(value) -> int:
     return sum(2 if ord(c) > 127 else 1 for c in str(value))
 
 
+def _resolve_column_format(header: str) -> str | None:
+    """헤더 문자열에 맞는 셀서식 반환 (매칭 없으면 None)."""
+    for keywords, fmt in COLUMN_FORMAT_RULES:
+        if any(kw in header for kw in keywords):
+            return fmt
+    return None
+
+
 def format_worksheet(ws) -> None:
-    """헤더 스타일 + 전체 테두리 + 금액 컬럼 숫자서식 + 열 너비 자동 조정."""
-    # 금액으로 끝나는 컬럼 인덱스 수집
-    amount_cols = [
-        c for c in range(1, ws.max_column + 1)
-        if any(
-            kw in str(ws.cell(row=1, column=c).value or "")
-            for kw in AMOUNT_COLUMN_KEYWORDS
-        )
-    ]
+    """헤더 스타일 + 전체 테두리 + 헤더별 셀서식 + 열 너비 자동 조정."""
+    # 컬럼 인덱스별 적용할 셀서식 (없으면 None)
+    col_formats: dict[int, str] = {}
+    for c in range(1, ws.max_column + 1):
+        header = str(ws.cell(row=1, column=c).value or "")
+        fmt = _resolve_column_format(header)
+        if fmt:
+            col_formats[c] = fmt
 
     # 헤더 스타일
     for cell in ws[1]:
@@ -130,13 +143,13 @@ def format_worksheet(ws) -> None:
         cell.font = HEADER_FONT
         cell.alignment = HEADER_ALIGN
 
-    # 전체 셀 테두리 + 금액 컬럼 숫자서식
+    # 전체 셀 테두리 + 헤더별 셀서식
     for row_idx in range(1, ws.max_row + 1):
         for col_idx in range(1, ws.max_column + 1):
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.border = CELL_BORDER
-            if row_idx > 1 and col_idx in amount_cols:
-                cell.number_format = AMOUNT_NUMBER_FORMAT
+            if row_idx > 1 and col_idx in col_formats:
+                cell.number_format = col_formats[col_idx]
 
     # 열 너비 자동 조정
     for col_idx in range(1, ws.max_column + 1):
@@ -226,6 +239,12 @@ def extract_sheet(wb, sheet_name: str, xlsx_path: Path) -> pd.DataFrame:
         rows.append(values)
 
     df = pd.DataFrame(rows, columns=headers)
+
+    # 금액/잔액/수익 컬럼은 빈 값(None/NaN/빈 문자열)을 0으로 채움
+    for col in df.columns:
+        if any(kw in str(col) for kw in ZERO_FILL_KEYWORDS):
+            df[col] = df[col].replace({"": None}).fillna(0)
+
     df.insert(0, "회사명", extract_company_name(xlsx_path.name))
     df.insert(1, "파일명", xlsx_path.name)
     return df
