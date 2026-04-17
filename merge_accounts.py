@@ -2,8 +2,9 @@
 폴더 내 동일 포맷 엑셀 파일들에서 지정 시트의 계정과목을 추출해
 하나의 엑셀 파일로 시트별로 합치는 스크립트.
 
-대상 시트: 현금및현금성자산, 유동화자산, 장단기및유동화부채
-헤더 행: B10~B40 중 '계정과목명' 문자열이 있는 셀이 속한 행.
+대상 시트: 현금및현금성자산(계정과목명), 유동화자산(계정과목코드명),
+           장단기및유동화부채(계정과목명)
+헤더 행: 각 시트의 B10~B40 중 해당 키워드가 포함된 셀이 있는 행.
 데이터: 헤더 바로 아래부터 빈 행이 나오기 전까지.
 
 사용법:
@@ -23,8 +24,13 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-SHEET_NAMES = ("현금및현금성자산", "유동화자산", "장단기및유동화부채")
-HEADER_KEYWORD = "계정과목명"
+# 시트명 -> 헤더 탐색 키워드
+SHEET_HEADER_KEYWORDS = {
+    "현금및현금성자산": "계정과목명",
+    "유동화자산": "계정과목코드명",
+    "장단기및유동화부채": "계정과목명",
+}
+SHEET_NAMES = tuple(SHEET_HEADER_KEYWORDS.keys())
 HEADER_SEARCH_ROWS = range(10, 41)  # B10 ~ B40
 HEADER_COL = "B"
 
@@ -140,11 +146,11 @@ def format_worksheet(ws) -> None:
         ws.column_dimensions[letter].width = min(max_width + 2, MAX_COL_WIDTH)
 
 
-def find_header_row(ws) -> int | None:
-    """B10~B40 중 '계정과목명'이 있는 행 번호 반환. 못 찾으면 None."""
+def find_header_row(ws, keyword: str) -> int | None:
+    """B10~B40 중 주어진 키워드가 있는 행 번호 반환. 못 찾으면 None."""
     for row in HEADER_SEARCH_ROWS:
         value = ws[f"{HEADER_COL}{row}"].value
-        if value is not None and HEADER_KEYWORD in str(value):
+        if value is not None and keyword in str(value):
             return row
     return None
 
@@ -181,11 +187,12 @@ def collect_false_cells(wb, xlsx_path: Path) -> list[dict]:
 def extract_sheet(wb, sheet_name: str, xlsx_path: Path) -> pd.DataFrame:
     """특정 시트에서 계정과목 표를 DataFrame으로 반환."""
     ws = wb[sheet_name]
+    keyword = SHEET_HEADER_KEYWORDS[sheet_name]
 
-    header_row = find_header_row(ws)
+    header_row = find_header_row(ws, keyword)
     if header_row is None:
         raise ValueError(
-            f"B10~B40에서 '{HEADER_KEYWORD}' 헤더를 찾지 못했습니다."
+            f"B10~B40에서 '{keyword}' 헤더를 찾지 못했습니다."
         )
 
     # 헤더 행 전체 값 수집 (B열부터 오른쪽 끝까지)
