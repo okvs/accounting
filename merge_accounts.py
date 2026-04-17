@@ -34,6 +34,8 @@ FALSE_CHECK_MIN_COL = 5  # E
 FALSE_CHECK_MAX_COL = 6  # F
 FALSE_CHECK_MAX_ROW = 40
 
+ERROR_SHEET = "ERROR"
+
 # 회사명 추출 설정
 LEADING_STRIP_PATTERN = re.compile(r"^[0-9.#\-_]+")
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\s]+")
@@ -231,12 +233,18 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     # sheet_name -> list[DataFrame]
     sheet_frames: dict[str, list[pd.DataFrame]] = {s: [] for s in SHEET_NAMES}
     false_rows: list[dict] = []
+    error_rows: list[dict] = []
 
     for path in xlsx_files:
+        company = extract_company_name(path.name)
         try:
             wb = load_workbook(filename=path, data_only=True, read_only=True)
         except Exception as e:
             print(f"[실패] {path.name} 열기 오류: {e}")
+            error_rows.append({
+                "회사명": company, "파일명": path.name,
+                "시트": "", "사유": f"파일 열기 실패: {e}",
+            })
             continue
         try:
             for sheet in SHEET_NAMES:
@@ -249,6 +257,10 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                     sheet_frames[sheet].append(df)
                 except Exception as e:
                     print(f"[실패] {path.name} / {sheet}: {e}")
+                    error_rows.append({
+                        "회사명": company, "파일명": path.name,
+                        "시트": sheet, "사유": str(e),
+                    })
 
             hits = collect_false_cells(wb, path)
             if hits:
@@ -258,7 +270,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
             wb.close()
 
     non_empty = {s: fs for s, fs in sheet_frames.items() if fs}
-    if not non_empty and not false_rows:
+    if not non_empty and not false_rows and not error_rows:
         print("추출된 데이터가 없어 출력 파일을 생성하지 않습니다.")
         return
 
@@ -275,6 +287,13 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
         false_df.to_excel(writer, sheet_name=FALSE_CHECK_SHEET, index=False)
         format_worksheet(writer.sheets[FALSE_CHECK_SHEET])
         print(f"  → {FALSE_CHECK_SHEET}: {len(false_df)}건")
+
+        error_df = pd.DataFrame(
+            error_rows, columns=["회사명", "파일명", "시트", "사유"]
+        )
+        error_df.to_excel(writer, sheet_name=ERROR_SHEET, index=False)
+        format_worksheet(writer.sheets[ERROR_SHEET])
+        print(f"  → {ERROR_SHEET}: {len(error_df)}건")
     print(f"\n[완료] {output_path}")
 
 
