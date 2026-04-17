@@ -10,6 +10,10 @@ env/
 ~$*.xlsx
 ~$*.xls
 
+# 데이터 엑셀 (입력/출력)
+*.xlsx
+*.xls
+
 # OS
 Thumbs.db
 .DS_Store
