@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pandas as pd
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 SHEET_NAME = "현금및현금성자산"
 HEADER_KEYWORD = "계정과목명"
@@ -28,7 +30,23 @@ HEADER_COL = "B"
 # 회사명 추출 설정
 LEADING_STRIP_PATTERN = re.compile(r"^[0-9.#\-_]+")
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\s]+")
-DROP_TOKENS = {"템플릿", "template"}
+# 부분 일치(substring)로 제거할 패턴 — 토큰 안에 포함되면 토큰 전체 제거
+DROP_SUBSTRINGS = ("template", "템플릿", "결산자료요청", "공정가치반영")
+# 정규식 패턴 — 토큰 안에서 매칭되면 토큰 전체 제거 (버전 표기 v1, v2.0 등)
+DROP_REGEXES = (re.compile(r"v[\d.]+", re.IGNORECASE),)
+# 정확히 일치할 때만 제거할 토큰
+DROP_EXACT = ("CB",)
+
+
+def _should_drop_token(token: str) -> bool:
+    if not token or token.isdigit():
+        return True
+    if token in DROP_EXACT:
+        return True
+    lower = token.lower()
+    if any(s in lower for s in DROP_SUBSTRINGS):
+        return True
+    return any(p.search(token) for p in DROP_REGEXES)
 
 
 def extract_company_name(filename: str) -> str:
@@ -37,17 +55,49 @@ def extract_company_name(filename: str) -> str:
     규칙:
       1) 확장자 제거 후 앞쪽 [0-9.#-_] 연속 문자 제거
       2) '_' 또는 공백으로 split
-      3) 숫자로만 된 토큰, '템플릿'/'Template' 토큰 제거
+      3) 토큰 제거 규칙:
+         - 숫자로만 이루어진 토큰
+         - 'template'/'템플릿'/'결산자료요청'/'공정가치반영'이 포함된 토큰
+         - 'v1', 'v2.0' 등 버전 표기 포함 토큰
+         - 정확히 'CB'인 토큰
       4) 남은 토큰을 '_'로 이어 반환
     """
     stem = Path(filename).stem
     stripped = LEADING_STRIP_PATTERN.sub("", stem)
     tokens = [t for t in TOKEN_SPLIT_PATTERN.split(stripped) if t]
-    kept = [
-        t for t in tokens
-        if not t.isdigit() and t.lower() not in DROP_TOKENS
-    ]
+    kept = [t for t in tokens if not _should_drop_token(t)]
     return "_".join(kept) if kept else stem
+
+
+# 출력 스타일
+HEADER_FILL = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+HEADER_FONT = Font(bold=True, color="FFFFFF")
+HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
+MAX_COL_WIDTH = 60
+
+
+def _cell_display_width(value) -> int:
+    """한글/전각문자는 2칸으로 계산."""
+    if value is None:
+        return 0
+    return sum(2 if ord(c) > 127 else 1 for c in str(value))
+
+
+def format_worksheet(ws) -> None:
+    """헤더 스타일 지정 + 열 너비 자동 조정."""
+    for cell in ws[1]:
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = HEADER_ALIGN
+
+    for col_idx in range(1, ws.max_column + 1):
+        letter = get_column_letter(col_idx)
+        max_width = 0
+        for row_idx in range(1, ws.max_row + 1):
+            w = _cell_display_width(ws.cell(row=row_idx, column=col_idx).value)
+            if w > max_width:
+                max_width = w
+        ws.column_dimensions[letter].width = min(max_width + 2, MAX_COL_WIDTH)
 
 
 def find_header_row(ws) -> int | None:
@@ -131,8 +181,10 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
         return
 
     merged = pd.concat(frames, ignore_index=True)
+    sheet = "계정과목_통합"
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-        merged.to_excel(writer, sheet_name="계정과목_통합", index=False)
+        merged.to_excel(writer, sheet_name=sheet, index=False)
+        format_worksheet(writer.sheets[sheet])
     print(f"\n[완료] {output_path} ({len(merged)}행)")
 
 
