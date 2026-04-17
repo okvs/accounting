@@ -28,6 +28,12 @@ HEADER_KEYWORD = "계정과목명"
 HEADER_SEARCH_ROWS = range(13, 18)  # B13 ~ B17
 HEADER_COL = "B"
 
+# FALSE 값 점검 범위 (전체 시트의 E1:F40)
+FALSE_CHECK_SHEET = "FALSE check"
+FALSE_CHECK_MIN_COL = 5  # E
+FALSE_CHECK_MAX_COL = 6  # F
+FALSE_CHECK_MAX_ROW = 40
+
 # 회사명 추출 설정
 LEADING_STRIP_PATTERN = re.compile(r"^[0-9.#\-_]+")
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\s]+")
@@ -141,6 +147,35 @@ def find_header_row(ws) -> int | None:
     return None
 
 
+def _is_false_value(v) -> bool:
+    if v is False:
+        return True
+    if isinstance(v, str) and v.strip().upper() == "FALSE":
+        return True
+    return False
+
+
+def collect_false_cells(wb, xlsx_path: Path) -> list[dict]:
+    """전체 시트의 E1:F40에서 FALSE 값을 가진 셀 위치 수집."""
+    company = extract_company_name(xlsx_path.name)
+    results: list[dict] = []
+    for sheet in wb.sheetnames:
+        ws = wb[sheet]
+        for row_cells in ws.iter_rows(
+            min_row=1, max_row=FALSE_CHECK_MAX_ROW,
+            min_col=FALSE_CHECK_MIN_COL, max_col=FALSE_CHECK_MAX_COL,
+        ):
+            for cell in row_cells:
+                if _is_false_value(cell.value):
+                    results.append({
+                        "회사명": company,
+                        "파일명": xlsx_path.name,
+                        "시트": sheet,
+                        "셀위치": cell.coordinate,
+                    })
+    return results
+
+
 def extract_sheet(wb, sheet_name: str, xlsx_path: Path) -> pd.DataFrame:
     """특정 시트에서 계정과목 표를 DataFrame으로 반환."""
     ws = wb[sheet_name]
@@ -195,6 +230,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
 
     # sheet_name -> list[DataFrame]
     sheet_frames: dict[str, list[pd.DataFrame]] = {s: [] for s in SHEET_NAMES}
+    false_rows: list[dict] = []
 
     for path in xlsx_files:
         try:
@@ -213,11 +249,16 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                     sheet_frames[sheet].append(df)
                 except Exception as e:
                     print(f"[실패] {path.name} / {sheet}: {e}")
+
+            hits = collect_false_cells(wb, path)
+            if hits:
+                print(f"[FALSE] {path.name}: {len(hits)}건")
+                false_rows.extend(hits)
         finally:
             wb.close()
 
     non_empty = {s: fs for s, fs in sheet_frames.items() if fs}
-    if not non_empty:
+    if not non_empty and not false_rows:
         print("추출된 데이터가 없어 출력 파일을 생성하지 않습니다.")
         return
 
@@ -227,6 +268,13 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
             merged.to_excel(writer, sheet_name=sheet, index=False)
             format_worksheet(writer.sheets[sheet])
             print(f"  → {sheet}: {len(merged)}행")
+
+        false_df = pd.DataFrame(
+            false_rows, columns=["회사명", "파일명", "시트", "셀위치"]
+        )
+        false_df.to_excel(writer, sheet_name=FALSE_CHECK_SHEET, index=False)
+        format_worksheet(writer.sheets[FALSE_CHECK_SHEET])
+        print(f"  → {FALSE_CHECK_SHEET}: {len(false_df)}건")
     print(f"\n[완료] {output_path}")
 
 
