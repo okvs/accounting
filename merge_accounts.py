@@ -102,7 +102,7 @@ HEADER_ALIGN = Alignment(horizontal="center", vertical="center")
 THIN_SIDE = Side(style="thin", color="000000")
 CELL_BORDER = Border(top=THIN_SIDE, bottom=THIN_SIDE, left=THIN_SIDE, right=THIN_SIDE)
 AMOUNT_NUMBER_FORMAT = "#,##0;[Red](#,##0)"  # 숫자-빨간색괄호 (천단위 구분)
-AMOUNT_COLUMN_KEYWORD = "금액"
+AMOUNT_COLUMN_KEYWORDS = ("금액", "잔액")
 MAX_COL_WIDTH = 60
 
 
@@ -118,7 +118,10 @@ def format_worksheet(ws) -> None:
     # 금액으로 끝나는 컬럼 인덱스 수집
     amount_cols = [
         c for c in range(1, ws.max_column + 1)
-        if AMOUNT_COLUMN_KEYWORD in str(ws.cell(row=1, column=c).value or "")
+        if any(
+            kw in str(ws.cell(row=1, column=c).value or "")
+            for kw in AMOUNT_COLUMN_KEYWORDS
+        )
     ]
 
     # 헤더 스타일
