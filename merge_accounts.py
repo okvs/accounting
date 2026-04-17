@@ -32,8 +32,15 @@ LEADING_STRIP_PATTERN = re.compile(r"^[0-9.#\-_]+")
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\s]+")
 # 부분 일치(substring)로 제거할 패턴 — 토큰 안에 포함되면 토큰 전체 제거
 DROP_SUBSTRINGS = ("template", "템플릿", "결산자료요청", "공정가치반영")
-# 정규식 패턴 — 토큰 안에서 매칭되면 토큰 전체 제거 (버전 표기 v1, v2.0 등)
-DROP_REGEXES = (re.compile(r"v[\d.]+", re.IGNORECASE),)
+# 부분 매칭 정규식 — 토큰 안에서 매칭되면 토큰 전체 제거
+DROP_CONTAINS_REGEXES = (
+    re.compile(r"v[\d.]+", re.IGNORECASE),  # 버전 표기 v1, v2.0 등
+    re.compile(r"\d{6,}"),                   # 6자 이상 연속 숫자 (날짜 형식 포함)
+)
+# 전체 일치 정규식 — 토큰 전체가 매칭될 때만 제거
+DROP_FULLMATCH_REGEXES = (
+    re.compile(r"[A-Za-z]{3}"),  # 영어 3글자만으로 이루어진 토큰
+)
 # 정확히 일치할 때만 제거할 토큰
 DROP_EXACT = ("CB",)
 
@@ -43,10 +50,12 @@ def _should_drop_token(token: str) -> bool:
         return True
     if token in DROP_EXACT:
         return True
+    if any(p.fullmatch(token) for p in DROP_FULLMATCH_REGEXES):
+        return True
     lower = token.lower()
     if any(s in lower for s in DROP_SUBSTRINGS):
         return True
-    return any(p.search(token) for p in DROP_REGEXES)
+    return any(p.search(token) for p in DROP_CONTAINS_REGEXES)
 
 
 def extract_company_name(filename: str) -> str:
@@ -59,6 +68,8 @@ def extract_company_name(filename: str) -> str:
          - 숫자로만 이루어진 토큰
          - 'template'/'템플릿'/'결산자료요청'/'공정가치반영'이 포함된 토큰
          - 'v1', 'v2.0' 등 버전 표기 포함 토큰
+         - 6자 이상 연속 숫자를 포함한 토큰 (260307xx 같은 날짜형)
+         - 영어 3글자만으로 이루어진 토큰
          - 정확히 'CB'인 토큰
       4) 남은 토큰을 '_'로 이어 반환
     """
