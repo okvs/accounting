@@ -43,6 +43,7 @@ FALSE_CHECK_MAX_COL = 6  # F
 FALSE_CHECK_MAX_ROW = 40
 
 ERROR_SHEET = "ERROR"
+RUN_RESULT_SHEET = "실행결과"
 
 # ERROR 시트에서 제외할 경고 메시지 (openpyxl 무해 경고 등)
 IGNORED_WARNING_SUBSTRINGS = (
@@ -280,6 +281,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     sheet_frames: dict[str, list[pd.DataFrame]] = {s: [] for s in SHEET_NAMES}
     false_rows: list[dict] = []
     error_rows: list[dict] = []
+    run_rows: list[dict] = []
 
     def _record_warnings(caught, company, filename, sheet, phase):
         for w in caught:
@@ -299,6 +301,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
     for idx, path in enumerate(xlsx_files, start=1):
         prog = f"{idx}/{total}"
         company = extract_company_name(path.name)
+        per_sheet_status: dict[str, str] = {s: "" for s in SHEET_NAMES}
 
         # 파일 열기 (경고 포함)
         with warnings.catch_warnings(record=True) as caught:
@@ -316,6 +319,11 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                 "회사명": company, "파일명": path.name,
                 "시트": "", "사유": f"파일 열기 실패: {open_error}",
             })
+            fail_msg = f"파일 열기 실패: {open_error}"
+            run_rows.append({
+                "번호": idx, "파일명": path.name,
+                **{s: fail_msg for s in SHEET_NAMES},
+            })
             continue
 
         try:
@@ -326,6 +334,7 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                         "회사명": company, "파일명": path.name,
                         "시트": sheet, "사유": "시트 없음",
                     })
+                    per_sheet_status[sheet] = "시트 없음"
                     continue
                 with warnings.catch_warnings(record=True) as caught:
                     warnings.simplefilter("always")
@@ -337,14 +346,17 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                                 "회사명": company, "파일명": path.name,
                                 "시트": sheet, "사유": "데이터 행 없음",
                             })
+                            per_sheet_status[sheet] = "데이터 행 없음"
                         else:
                             sheet_frames[sheet].append(df)
+                            per_sheet_status[sheet] = f"OK ({len(df)}행)"
                     except Exception as e:
                         print(f"[실패] {path.name} / {sheet}: {e}")
                         error_rows.append({
                             "회사명": company, "파일명": path.name,
                             "시트": sheet, "사유": str(e),
                         })
+                        per_sheet_status[sheet] = f"오류: {e}"
                 _record_warnings(caught, company, path.name, sheet, "시트 처리")
 
             # FALSE 점검 (경고 포함)
@@ -361,12 +373,24 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                 wb.close()
             _record_warnings(caught, company, path.name, "", "파일 닫기")
 
+        run_rows.append({
+            "번호": idx, "파일명": path.name,
+            **per_sheet_status,
+        })
+
     non_empty = {s: fs for s, fs in sheet_frames.items() if fs}
-    if not non_empty and not false_rows and not error_rows:
+    if not non_empty and not false_rows and not error_rows and not run_rows:
         print("추출된 데이터가 없어 출력 파일을 생성하지 않습니다.")
         return
 
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        run_df = pd.DataFrame(
+            run_rows, columns=["번호", "파일명", *SHEET_NAMES]
+        )
+        run_df.to_excel(writer, sheet_name=RUN_RESULT_SHEET, index=False)
+        format_worksheet(writer.sheets[RUN_RESULT_SHEET])
+        print(f"  → {RUN_RESULT_SHEET}: {len(run_df)}건")
+
         for sheet, frames in non_empty.items():
             merged = pd.concat(frames, ignore_index=True)
             merged.to_excel(writer, sheet_name=sheet, index=False)
