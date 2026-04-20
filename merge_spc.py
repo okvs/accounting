@@ -314,6 +314,10 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
             for sheet in SHEET_NAMES:
                 if sheet not in wb.sheetnames:
                     print(f"[건너뜀] {path.name} / {sheet}: 시트 없음")
+                    error_rows.append({
+                        "회사명": company, "파일명": path.name,
+                        "시트": sheet, "사유": "시트 없음",
+                    })
                     continue
                 with warnings.catch_warnings(record=True) as caught:
                     warnings.simplefilter("always")
