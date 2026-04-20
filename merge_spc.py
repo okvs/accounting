@@ -44,6 +44,11 @@ FALSE_CHECK_MAX_ROW = 40
 
 ERROR_SHEET = "ERROR"
 
+# ERROR 시트에서 제외할 경고 메시지 (openpyxl 무해 경고 등)
+IGNORED_WARNING_SUBSTRINGS = (
+    "Data Validation extension is not supported",
+)
+
 # 회사명 추출 설정
 LEADING_STRIP_PATTERN = re.compile(r"^[0-9.#\-_]+")
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\s]+")
@@ -278,7 +283,10 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
 
     def _record_warnings(caught, company, filename, sheet, phase):
         for w in caught:
-            msg = f"{type(w.message).__name__}: {w.message}"
+            raw = str(w.message)
+            if any(s in raw for s in IGNORED_WARNING_SUBSTRINGS):
+                continue
+            msg = f"{type(w.message).__name__}: {raw}"
             if phase:
                 msg = f"[{phase}] {msg}"
             print(f"[경고] {filename} / {sheet or '-'}: {msg}")
