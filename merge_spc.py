@@ -324,7 +324,13 @@ def merge_folder(input_dir: Path, output_path: Path) -> None:
                     try:
                         df = extract_sheet(wb, sheet, path)
                         print(f"[OK {prog}] {path.name} / {sheet}: {len(df)}행 추출")
-                        sheet_frames[sheet].append(df)
+                        if len(df) == 0:
+                            error_rows.append({
+                                "회사명": company, "파일명": path.name,
+                                "시트": sheet, "사유": "데이터 행 없음",
+                            })
+                        else:
+                            sheet_frames[sheet].append(df)
                     except Exception as e:
                         print(f"[실패] {path.name} / {sheet}: {e}")
                         error_rows.append({
