@@ -10,6 +10,9 @@ env/
 *.xlsx
 *.xls
 
+# 예시용 템플릿은 예외
+!5. 비디에이치 템플릿_20260411_완.xlsx
+
 # OS
 Thumbs.db
 .DS_Store
