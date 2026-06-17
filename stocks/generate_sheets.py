@@ -6,6 +6,7 @@ import traceback
 
 import pandas as pd
 import openpyxl
+from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
 STOCKS_DIR = r'C:\Workspace\accounting\stocks'
@@ -104,6 +105,13 @@ def format_numbers_as_text(ws):
                 cell.value = int(cell.value)
             if isinstance(cell.value, (int, float)):
                 cell.number_format = '#,##0'
+
+
+def center_align_all(ws):
+    center = Alignment(horizontal='center', vertical='center')
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = center
 
 
 def main():
@@ -244,6 +252,7 @@ def main():
         wb_out = writer.book
         for ws in wb_out.worksheets:
             format_numbers_as_text(ws)
+            center_align_all(ws)
             auto_adjust_column_width(ws)
 
     print(f'\n저장 완료: {OUTPUT_PATH}')
